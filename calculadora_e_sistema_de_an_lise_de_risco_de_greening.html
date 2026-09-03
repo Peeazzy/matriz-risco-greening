@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Análise de Risco de Greening (HLB)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Lato:wght@400;700&display=swap');
+        body {
+            font-family: 'Lato', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        h1, h2, h3, h4, .font-heading {
+            font-family: 'Poppins', sans-serif;
+        }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .risk-gauge-bg {
+            background: conic-gradient(from 180deg at 50% 50%, #10b981 0deg 90deg, #f59e0b 90deg 180deg, #f97316 180deg 270deg, #ef4444 270deg 360deg);
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-12">
+
+    <!-- Header / Navbar -->
+    <header class="border-b border-slate-800 bg-slate-900/80 sticky top-0 z-50 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                    <i class="fa-solid fa-bug text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-white tracking-wide">AgroRisk <span class="text-emerald-400">HLB</span></h1>
+                    <p class="text-xs text-slate-400">Programa de Análise e Matriz de Risco de Greening</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button onclick="carregarCenardPadrao()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-lg border border-slate-700 transition">
+                    <i class="fa-solid fa-rotate-left mr-1"></i> Restaurar Padrões
+                </button>
+                <button onclick="window.print()" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg shadow-lg shadow-emerald-900/30 transition">
+                    <i class="fa-solid fa-file-pdf mr-1"></i> Exportar Relatório
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
+
+        <!-- Banner de Fórmula Ponderada -->
+        <div class="glass-card rounded-2xl p-6 relative overflow-hidden">
+            <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                    <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-2">
+                        Modelo Matemático
+                    </span>
+                    <h2 class="text-xl font-bold text-white">Equação de Risco Geral Integrado</h2>
+                    <p class="text-sm text-slate-300 mt-1">
+                        $R_{Geral} = \frac{IR \cdot 2,5 + RE \cdot 1,0 + RI \cdot 1,0}{4,5}$
+                    </p>
+                </div>
+                <div class="text-right bg-slate-800/80 p-4 rounded-xl border border-slate-700/60 min-w-[240px]">
+                    <div class="text-xs text-slate-400">Classificação Atual</div>
+                    <div id="riskBadge" class="text-2xl font-bold text-emerald-400 mt-1">---</div>
+                    <div id="riskScoreText" class="text-xs text-slate-400 mt-0.5">Índice: 0.00 / 1.00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Score Cards & Charts -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Card Risco Geral Gauge -->
+            <div class="glass-card rounded-2xl p-6 flex flex-col justify-between items-center text-center">
+                <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-2">Risco Geral da Propriedade</h3>
+                
+                <div class="relative w-48 h-48 my-4 flex items-center justify-center">
+                    <canvas id="gaugeChart" class="w-full h-full"></canvas>
+                    <div class="absolute flex flex-col items-center justify-center">
+                        <span id="gaugeValue" class="text-4xl font-extrabold text-white">0%</span>
+                        <span id="gaugeLabel" class="text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded mt-1 bg-emerald-500/20 text-emerald-400">Baixo</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 w-full text-center gap-2 pt-4 border-t border-slate-800 text-xs">
+                    <div class="bg-slate-800/50 p-2 rounded-lg">
+                        <span class="block text-slate-400">Regional (IR)</span>
+                        <span id="valIRCard" class="font-bold text-emerald-400">0%</span>
+                    </div>
+                    <div class="bg-slate-800/50 p-2 rounded-lg">
+                        <span class="block text-slate-400">Externo (RE)</span>
+                        <span id="valRECard" class="font-bold text-emerald-400">0%</span>
+                    </div>
+                    <div class="bg-slate-800/50 p-2 rounded-lg">
+                        <span class="block text-slate-400">Interno (RI)</span>
+                        <span id="valRICard" class="font-bold text-emerald-400">0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráfico Radar / Comparativo -->
+            <div class="glass-card rounded-2xl p-6 lg:col-span-2 flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wider">Decomposição dos Fatores de Risco</h3>
+                    <span class="text-xs text-slate-400"><i class="fa-solid fa-chart-radar text-emerald-400 mr-1"></i> Visualização Tri-Fatorial</span>
+                </div>
+                <div class="h-64 relative flex items-center justify-center">
+                    <canvas id="radarChart"></canvas>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Formulários de Parâmetros de Entrada -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- COLUNA 1: Pilar 1 - Risco Regional (IR) -->
+            <div class="glass-card rounded-2xl p-6 space-y-6">
+                <div class="flex items-center space-x-3 border-b border-slate-800 pb-3">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">1</div>
+                    <div>
+                        <h3 class="font-bold text-white">Risco Regional (IR)</h3>
+                        <p class="text-xs text-slate-400">Pressão de Inóculo no Setor (Peso 2.5)</p>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <label class="text-slate-300 font-medium">Incidência Regional (Fundecitrus)</label>
+                            <span id="labelIRVal" class="text-emerald-400 font-bold">25%</span>
+                        </div>
+                        <input type="range" id="inputIR" min="0" max="100" value="25" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" oninput="calcularTudo()">
+                        <p class="text-xs text-slate-400 mt-1">Taxa oficial de plantas sintomáticas no setor/região citrícola.</p>
+                    </div>
+
+                    <div class="p-3 bg-slate-800/60 rounded-xl border border-slate-700/50 text-xs text-slate-300 space-y-1">
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Impacto Ponderado:</span>
+                            <span id="impactoIR" class="font-bold text-emerald-400">0.138 pts</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">
+                            O inóculo regional é o principal vetor de invasão externa por psilídeos infectivos migratórios.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- COLUNA 2: Pilar 2 - Risco Externo (RE) - Vizinhos -->
+            <div class="glass-card rounded-2xl p-6 space-y-6">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">2</div>
+                        <div>
+                            <h3 class="font-bold text-white">Risco Externo (RE)</h3>
+                            <p class="text-xs text-slate-400">Análise de Vizinhos (Peso 1.0)</p>
+                        </div>
+                    </div>
+                    <button onclick="adicionarVizinho()" class="text-xs bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 px-2.5 py-1.5 rounded-lg border border-emerald-500/30 transition">
+                        <i class="fa-solid fa-plus mr-1"></i> Add Vizinho
+                    </button>
+                </div>
+
+                <div class="space-y-3 max-h-[280px] overflow-y-auto pr-1" id="listaVizinhos">
+                    <!-- Gerado dinamicamente via JS -->
+                </div>
+
+                <div class="p-3 bg-slate-800/60 rounded-xl border border-slate-700/50 text-xs text-slate-300 flex justify-between items-center">
+                    <div>
+                        <span class="text-slate-400 block">Soma de Risco dos Vizinhos:</span>
+                        <span id="reSomaText" class="font-bold text-white">0.00</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-slate-400 block">RE Efetivo (Sat. máx 1.0):</span>
+                        <span id="reEfetivoText" class="font-bold text-emerald-400">0.00</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- COLUNA 3: Pilar 3 - Risco Interno (RI) - Borda e Manejo -->
+            <div class="glass-card rounded-2xl p-6 space-y-6">
+                <div class="flex items-center space-x-3 border-b border-slate-800 pb-3">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">3</div>
+                    <div>
+                        <h3 class="font-bold text-white">Risco Interno (RI)</h3>
+                        <p class="text-xs text-slate-400">Borda & Manejo (Peso 1.0)</p>
+                    </div>
+                </div>
+
+                <div class="space-y-4 text-xs">
+                    <!-- Proporção de Borda -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-slate-300 font-medium">Fração da Área em Borda (B)</label>
+                            <span id="labelBVal" class="text-emerald-400 font-bold">30%</span>
+                        </div>
+                        <input type="range" id="inputB" min="5" max="70" value="30" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" oninput="calcularTudo()">
+                        <p class="text-[11px] text-slate-400 mt-1">Área dos primeiros 100-200m / Área total da fazenda.</p>
+                    </div>
+
+                    <!-- Rigor do Manejo Borda -->
+                    <div>
+                        <label class="text-slate-300 font-medium block mb-1">Rigor do Manejo na Borda</label>
+                        <select id="selectManejoBorda" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-200 text-xs focus:ring-1 focus:ring-emerald-500 outline-none" onchange="calcularTudo()">
+                            <option value="0.1">Excelente (Pulverização 7/7 dias + Borda Ampliada)</option>
+                            <option value="0.3" selected>Bom (Pulverização 10/10 dias)</option>
+                            <option value="0.6">Regular (Pulverização 15/15 dias)</option>
+                            <option value="1.0">Inadequado (&gt; 20 dias ou Falhas)</option>
+                        </select>
+                    </div>
+
+                    <!-- Rigor do Manejo Centro -->
+                    <div>
+                        <label class="text-slate-300 font-medium block mb-1">Rigor do Manejo no Centro</label>
+                        <select id="selectManejoCentro" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-200 text-xs focus:ring-1 focus:ring-emerald-500 outline-none" onchange="calcularTudo()">
+                            <option value="0.1" selected>Rigoroso (Inspeção contínua + Erradicação)</option>
+                            <option value="0.4">Moderado (Erradicação eventual)</option>
+                            <option value="0.8">Baixo (Sem eliminação sistemática de doentes)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Recomendações Técnicas Agronômicas -->
+        <div class="glass-card rounded-2xl p-6">
+            <div class="flex items-center space-x-3 mb-4">
+                <i class="fa-solid fa-clipboard-check text-emerald-400 text-xl"></i>
+                <h3 class="text-lg font-bold text-white">Recomendações Operacionais & Plano de Mitigação</h3>
+            </div>
+            <div id="containerRecomendacoes" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Gerado dinamicamente via JS -->
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Script Lógico e de Cálculo -->
+    <script>
+        // Estrutura de dados dos Vizinhos
+        let vizinhos = [
+            { id: 1, nome: "Vizinho Norte", distancia: 1.5, tamanho: "medio", erradicacao: "sim", controle: "regular" },
+            { id: 2, nome: "Pomar Leste", distancia: 3.0, tamanho: "grande", erradicacao: "parcial", controle: "ruim" }
+        ];
+
+        let nextId = 3;
+        let gaugeChartInstance = null;
+        let radarChartInstance = null;
+
+        // Tabela de multiplicadores de distância
+        function getFatorDistancia(dist) {
+            if (dist <= 1.5) return 1.0;
+            if (dist <= 3.0) return 0.7;
+            if (dist <= 5.0) return 0.4;
+            if (dist <= 10.0) return 0.1;
+            return 0.0;
+        }
+
+        function getFatorTamanho(tam) {
+            if (tam === 'pequeno') return 0.5; // <50 ha
+            if (tam === 'medio') return 0.8;   // 50-200 ha
+            if (tam === 'grande') return 1.0;  // >200 ha
+            return 0.8;
+        }
+
+        function getFatorErradicacao(err) {
+            if (err === 'sim') return 0.2;
+            if (err === 'parcial') return 0.6;
+            if (err === 'nao') return 1.0;
+            return 0.6;
+        }
+
+        function getFatorControle(ctrl) {
+            if (ctrl === 'excelente') return 0.2;
+            if (ctrl === 'regular') return 0.6;
+            if (ctrl === 'ruim') return 1.0;
+            return 0.6;
+        }
+
+        function renderizarVizinhos() {
+            const container = document.getElementById('listaVizinhos');
+            container.innerHTML = '';
+
+            vizinhos.forEach((v) => {
+                const fDist = getFatorDistancia(v.distancia);
+                const fTam = getFatorTamanho(v.tamanho);
+                const fErr = getFatorErradicacao(v.erradicacao);
+                const fCtrl = getFatorControle(v.controle);
+                const riscoIndividual = fDist * fTam * fErr * fCtrl;
+
+                const card = document.createElement('div');
+                card.className = "bg-slate-800/80 p-3 rounded-xl border border-slate-700/60 space-y-2 text-xs relative";
+                card.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <input type="text" value="${v.nome}" onchange="atualizarVizinho(${v.id}, 'nome', this.value)" class="bg-transparent font-semibold text-slate-200 focus:bg-slate-900 px-1 rounded outline-none border-b border-transparent focus:border-emerald-500">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-emerald-400">R: ${riscoIndividual.toFixed(2)}</span>
+                            <button onclick="removerVizinho(${v.id})" class="text-slate-500 hover:text-red-400"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="text-[10px] text-slate-400 block">Raio / Distância</label>
+                            <select onchange="atualizarVizinho(${v.id}, 'distancia', parseFloat(this.value))" class="w-full bg-slate-900 border border-slate-700 rounded p-1 text-[11px] text-slate-300">
+                                <option value="1.5" ${v.distancia === 1.5 ? 'selected' : ''}>&le; 1,5 km (Max)</option>
+                                <option value="3.0" ${v.distancia === 3.0 ? 'selected' : ''}>1,5 - 3,0 km</option>
+                                <option value="5.0" ${v.distancia === 5.0 ? 'selected' : ''}>3,0 - 5,0 km</option>
+                                <option value="10.0" ${v.distancia === 10.0 ? 'selected' : ''}>5,0 - 10,0 km</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-slate-400 block">Controle Psilídeo</label>
+                            <select onchange="atualizarVizinho(${v.id}, 'controle', this.value)" class="w-full bg-slate-900 border border-slate-700 rounded p-1 text-[11px] text-slate-300">
+                                <option value="excelente" ${v.controle === 'excelente' ? 'selected' : ''}>Excelente</option>
+                                <option value="regular" ${v.controle === 'regular' ? 'selected' : ''}>Regular</option>
+                                <option value="ruim" ${v.controle === 'ruim' ? 'selected' : ''}>Ausente / Ruim</option>
+                            </select>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function adicionarVizinho() {
+            vizinhos.push({
+                id: nextId++,
+                nome: `Vizinho ${nextId - 1}`,
+                distancia: 1.5,
+                tamanho: "medio",
+                erradicacao: "parcial",
+                controle: "ruim"
+            });
+            renderizarVizinhos();
+            calcularTudo();
+        }
+
+        function removerVizinho(id) {
+            vizinhos = vizinhos.filter(v => v.id !== id);
+            renderizarVizinhos();
+            calcularTudo();
+        }
+
+        function atualizarVizinho(id, campo, valor) {
+            const v = vizinhos.find(item => item.id === id);
+            if (v) {
+                v[campo] = valor;
+                calcularTudo();
+            }
+        }
+
+        function calcularTudo() {
+            // 1. Risco Regional (IR)
+            const irPercent = parseFloat(document.getElementById('inputIR').value);
+            document.getElementById('labelIRVal').innerText = irPercent + '%';
+            const IR = irPercent / 100.0;
+
+            // 2. Risco Externo (RE)
+            let somaRE = 0;
+            vizinhos.forEach(v => {
+                const fDist = getFatorDistancia(v.distancia);
+                const fTam = getFatorTamanho(v.tamanho);
+                const fErr = getFatorErradicacao(v.erradicacao);
+                const fCtrl = getFatorControle(v.controle);
+                somaRE += (fDist * fTam * fErr * fCtrl);
+            });
+
+            document.getElementById('reSomaText').innerText = somaRE.toFixed(2);
+            const RE = Math.min(1.0, somaRE);
+            document.getElementById('reEfetivoText').innerText = RE.toFixed(2);
+
+            // 3. Risco Interno (RI)
+            const bPercent = parseFloat(document.getElementById('inputB').value);
+            document.getElementById('labelBVal').innerText = bPercent + '%';
+            const B = bPercent / 100.0;
+
+            const mBorda = parseFloat(document.getElementById('selectManejoBorda').value);
+            const mCentro = parseFloat(document.getElementById('selectManejoCentro').value);
+
+            // Equação Manejo Interno (M): Ponderado pela fração de Borda vs Centro
+            const M = (B * mBorda * 2.0) + ((1 - B) * mCentro);
+            const M_normalizado = Math.min(1.0, M);
+
+            // RI = (B * pB + M * pM) / (pB + pM)
+            const pB = 2.0;
+            const pM = 1.0;
+            const RI = Math.min(1.0, ((B * pB) + (M_normalizado * pM)) / (pB + pM));
+
+            // 4. Risco Geral Ponderado
+            const pIR = 2.5;
+            const pRE = 1.0;
+            const pRI = 1.0;
+            const divisor = pIR + pRE + pRI; // 4.5
+
+            const riscoGeral = ((IR * pIR) + (RE * pRE) + (RI * pRI)) / divisor;
+
+            // Atualizar Cards de Valores
+            document.getElementById('valIRCard').innerText = Math.round(IR * 100) + '%';
+            document.getElementById('valRECard').innerText = Math.round(RE * 100) + '%';
+            document.getElementById('valRICard').innerText = Math.round(RI * 100) + '%';
+
+            document.getElementById('impactoIR').innerText = ((IR * pIR) / divisor).toFixed(3) + ' pts';
+
+            // Classificação
+            let status = "";
+            let corHex = "#10b981"; // Emerald
+            let bgBadge = "bg-emerald-500/20 text-emerald-400";
+
+            if (riscoGeral <= 0.25) {
+                status = "Baixo";
+                corHex = "#10b981";
+                bgBadge = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+            } else if (riscoGeral <= 0.50) {
+                status = "Médio";
+                corHex = "#f59e0b";
+                bgBadge = "bg-amber-500/20 text-amber-400 border border-amber-500/30";
+            } else if (riscoGeral <= 0.75) {
+                status = "Alto";
+                corHex = "#f97316";
+                bgBadge = "bg-orange-500/20 text-orange-400 border border-orange-500/30";
+            } else {
+                status = "Crítico";
+                corHex = "#ef4444";
+                bgBadge = "bg-red-500/20 text-red-400 border border-red-500/30";
+            }
+
+            const badgeElem = document.getElementById('riskBadge');
+            badgeElem.className = `text-2xl font-bold mt-1 px-3 py-1 rounded-lg inline-block ${bgBadge}`;
+            badgeElem.innerText = status;
+
+            document.getElementById('riskScoreText').innerText = `Score: ${riscoGeral.toFixed(3)} (${Math.round(riscoGeral * 100)}%)`;
+
+            document.getElementById('gaugeValue').innerText = Math.round(riscoGeral * 100) + '%';
+            document.getElementById('gaugeValue').style.color = corHex;
+
+            const labelGauge = document.getElementById('gaugeLabel');
+            labelGauge.innerText = status;
+            labelGauge.className = `text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded mt-1 ${bgBadge}`;
+
+            // Atualizar Gráficos
+            atualizarGaugeChart(riscoGeral, corHex);
+            atualizarRadarChart(IR, RE, RI, riscoGeral);
+
+            // Gerar Recomendações
+            gerarRecomendacoes(IR, RE, RI, B, mBorda, somaRE);
+        }
+
+        function atualizarGaugeChart(valor, cor) {
+            const ctx = document.getElementById('gaugeChart').getContext('2d');
+            const percentual = Math.round(valor * 100);
+            const restante = 100 - percentual;
+
+            if (gaugeChartInstance) {
+                gaugeChartInstance.destroy();
+            }
+
+            gaugeChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [percentual, restante],
+                        backgroundColor: [cor, '#334155'],
+                        borderWidth: 0,
+                        circumference: 240,
+                        rotation: 240
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '80%',
+                    plugins: {
+                        tooltip: { enabled: false },
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function atualizarRadarChart(IR, RE, RI, Geral) {
+            const ctx = document.getElementById('radarChart').getContext('2d');
+
+            if (radarChartInstance) {
+                radarChartInstance.destroy();
+            }
+
+            radarChartInstance = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['Incidência Regional (IR)', 'Risco Vizinhos (RE)', 'Manejo Borda/Interno (RI)'],
+                    datasets: [{
+                        label: 'Nível de Vulnerabilidade',
+                        data: [IR * 100, RE * 100, RI * 100],
+                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                        borderColor: '#10b981',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#10b981'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            min: 0,
+                            max: 100,
+                            ticks: { display: false },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                            pointLabels: {
+                                color: '#94a3b8',
+                                font: { size: 11, family: 'Poppins' }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function gerarRecomendacoes(IR, RE, RI, B, mBorda, somaRE) {
+            const container = document.getElementById('containerRecomendacoes');
+            container.innerHTML = '';
+
+            const recs = [];
+
+            if (IR > 0.3) {
+                recs.push({
+                    icone: "fa-solid fa-shield-virus",
+                    cor: "text-amber-400",
+                    titulo: "Alta Pressão Regional (IR)",
+                    desc: "Com regional acima de 30%, reduza o intervalo de pulverização na borda para no máximo 7 dias nos períodos de brotação."
+                });
+            }
+
+            if (somaRE > 0.5) {
+                recs.push({
+                    icone: "fa-solid fa-handshake-angle",
+                    cor: "text-orange-400",
+                    titulo: "Ação Conjunta de Vizinhança",
+                    desc: "Vizinhos em raio < 3km representam alto perigo. Proponha grupo de manejo regional e suporte para substituição de pomares abandonados."
+                });
+            }
+
+            if (B > 0.35) {
+                recs.push({
+                    icone: "fa-solid fa-vector-square",
+                    cor: "text-emerald-400",
+                    titulo: "Otimização de Geometria",
+                    desc: "Talhões recortados aumentam a faixa de borda. Avalie ampliação da faixa de aplicação externa para 150-200 metros."
+                });
+            }
+
+            if (mBorda > 0.3) {
+                recs.push({
+                    icone: "fa-solid fa-[#10b981] fa-spray-can-sparkles",
+                    cor: "text-emerald-400",
+                    titulo: "Rigor no Manejo Periférico",
+                    desc: "Adote rotação de princípios ativos com inseticidas sistêmicos e de contato nas bordas durante picos de psilídeo."
+                });
+            }
+
+            if (recs.length === 0) {
+                recs.push({
+                    icone: "fa-solid fa-circle-check",
+                    cor: "text-emerald-400",
+                    titulo: "Manejo Adequado",
+                    desc: "A propriedade apresenta bom nível de contenção. Mantenha as inspeções quinzenais e o monitoramento por armadilhas amarelas."
+                });
+            }
+
+            recs.forEach(r => {
+                const card = document.createElement('div');
+                card.className = "bg-slate-800/60 p-4 rounded-xl border border-slate-700/50 space-y-2";
+                card.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <i class="${r.icone} ${r.cor} text-lg"></i>
+                        <h4 class="font-bold text-white text-sm">${r.titulo}</h4>
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed">${r.desc}</p>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function carregarCenardPadrao() {
+            document.getElementById('inputIR').value = 25;
+            document.getElementById('inputB').value = 30;
+            document.getElementById('selectManejoBorda').value = "0.3";
+            document.getElementById('selectManejoCentro').value = "0.1";
+            vizinhos = [
+                { id: 1, nome: "Vizinho Norte", distancia: 1.5, tamanho: "medio", erradicacao: "sim", controle: "regular" },
+                { id: 2, nome: "Pomar Leste", distancia: 3.0, tamanho: "grande", erradicacao: "parcial", controle: "ruim" }
+            ];
+            nextId = 3;
+            renderizarVizinhos();
+            calcularTudo();
+        }
+
+        // Inicialização
+        window.addEventListener('DOMContentLoaded', () => {
+            renderizarVizinhos();
+            calcularTudo();
+        });
+    </script>
+</body>
+</html>
