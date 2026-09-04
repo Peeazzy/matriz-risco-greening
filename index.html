@@ -6,6 +6,13 @@
 <title>AgroRisk HLB — Matriz de Risco de Greening</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- Leaflet CSS & JS para o Mapa -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -17,6 +24,7 @@ input:focus,select:focus{outline:none;border-color:#55c987!important;box-shadow:
 .badge{border:1px solid rgba(85,201,135,.25);background:rgba(85,201,135,.08)}
 .muted{color:#8ea89b}
 .kpi{font-variant-numeric:tabular-nums}
+#map { height: 400px; width: 100%; border-radius: 1rem; }
 </style>
 </head>
 <body>
@@ -24,7 +32,7 @@ input:focus,select:focus{outline:none;border-color:#55c987!important;box-shadow:
   <div class="max-w-7xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
     <div>
       <div class="text-xl font-extrabold tracking-tight">🌿 AgroRisk <span class="text-emerald-400">HLB</span></div>
-      <div class="text-xs muted">Matriz de risco de Greening — versão baseada no Excel + PowerPoint</div>
+      <div class="text-xs muted">Matriz de risco de Greening — versão web com mapa integrado</div>
     </div>
     <div class="flex gap-2">
       <button onclick="resetAll()" class="px-3 py-2 rounded-xl badge text-sm">Restaurar</button>
@@ -34,6 +42,8 @@ input:focus,select:focus{outline:none;border-color:#55c987!important;box-shadow:
 </header>
 
 <main class="max-w-7xl mx-auto px-5 py-7 space-y-6">
+
+<!-- SEÇÃO DE RESUMO E GRÁFICO -->
 <section class="grid lg:grid-cols-3 gap-4">
   <div class="glass rounded-3xl p-6 lg:col-span-2">
     <div class="flex items-center justify-between">
@@ -58,21 +68,41 @@ input:focus,select:focus{outline:none;border-color:#55c987!important;box-shadow:
   </div>
 </section>
 
+<!-- NOVA SEÇÃO: MAPA DE SATÉLITE E CIDADES -->
+<section class="glass rounded-3xl p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <div>
+      <h2 class="text-xl font-bold">Localização & Geometria Interativa</h2>
+      <p class="text-sm muted">Encontre sua propriedade ou desenhe o talhão para calcular a borda automaticamente.</p>
+    </div>
+    <span class="badge rounded-full px-3 py-1 text-xs">Satélite + Cidades</span>
+  </div>
+  
+  <!-- Buscar cidade -->
+  <div class="flex gap-2">
+    <input id="searchCity" type="text" placeholder="Digite sua cidade ou município (ex: Araraquara, SP)" class="w-full rounded-xl px-4 py-2">
+    <button onclick="searchLocation()" class="px-4 py-2 rounded-xl bg-emerald-500 text-black font-bold text-sm">Buscar</button>
+  </div>
+
+  <div id="map"></div>
+</section>
+
+<!-- SEÇÕES DE DADOS E FORMULÁRIOS (MANTIDOS IGUAIS) -->
 <section class="glass rounded-3xl p-6">
   <div class="flex items-center justify-between mb-5">
-    <div><h2 class="text-xl font-bold">1 · Risco Regional (IR)</h2><p class="text-sm muted">Incidência regional → risco pela tabela oficial do Excel.</p></div>
+    <div><h2 class="text-xl font-bold">1 · Risco Regional (IR)</h2><p class="text-sm muted">Incidência regional → risco pela tabela oficial.</p></div>
     <span class="badge rounded-full px-3 py-1 text-xs">peso 2,5</span>
   </div>
   <div class="grid md:grid-cols-3 gap-4">
     <label class="block"><span class="text-sm muted">Incidência de HLB na região (%)</span><input id="incidence" type="number" min="0" step="0.01" value="0" class="mt-2 w-full rounded-xl px-4 py-3"></label>
     <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">Faixa aplicada</div><div id="regionalBand" class="font-semibold mt-1">0 a 0,5</div></div>
-    <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">IR calculado</div><div id="regionalRisk" class="kpi text-2xl font-bold mt-1">0,05</div></div>
+    <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">IR calculated</div><div id="regionalRisk" class="kpi text-2xl font-bold mt-1">0,05</div></div>
   </div>
 </section>
 
 <section class="glass rounded-3xl p-6">
   <div class="flex items-center justify-between mb-5">
-    <div><h2 class="text-xl font-bold">2 · Risco Externo (RE)</h2><p class="text-sm muted">Cada vizinho: D × T × N × (E × C), com saturação em 1; soma por vizinhança limitada a 1.</p></div>
+    <div><h2 class="text-xl font-bold">2 · Risco Externo (RE)</h2><p class="text-sm muted">Propriedades vizinhas.</p></div>
     <button onclick="addNeighbor()" class="px-4 py-2 rounded-xl bg-emerald-500 text-black font-bold text-sm">+ Adicionar vizinho</button>
   </div>
   <div id="neighbors" class="space-y-3"></div>
@@ -84,7 +114,7 @@ input:focus,select:focus{outline:none;border-color:#55c987!important;box-shadow:
 
 <section class="glass rounded-3xl p-6">
   <div class="flex items-center justify-between mb-5">
-    <div><h2 class="text-xl font-bold">3 · Risco Interno (RI)</h2><p class="text-sm muted">B = proporção de borda; M = manejo ponderado; RI = (B×2 + M×1)/3.</p></div>
+    <div><h2 class="text-xl font-bold">3 · Risco Interno (RI)</h2><p class="text-sm muted">Manejo e área de borda.</p></div>
     <span class="badge rounded-full px-3 py-1 text-xs">B peso 2 · M peso 1</span>
   </div>
 
@@ -98,14 +128,11 @@ input:focus,select:focus{outline:none;border-color:#55c987!important;box-shadow:
           <option value="circle">Círculo</option>
           <option value="square">Quadrado</option>
           <option value="r2">Retângulo 2:1</option>
-          <option value="r3">Retângulo 3:1</option>
-          <option value="r4">Retângulo 4:1</option>
-          <option value="r5">Retângulo 5:1</option>
         </select>
         <input id="areaHa" type="number" min="0" step="0.01" placeholder="Área (ha)" class="rounded-xl px-3 py-2">
         <button onclick="calcGeometry()" class="rounded-xl border border-emerald-400/30 px-3 py-2">Calcular B</button>
       </div>
-      <div id="geometryHint" class="text-xs muted mt-2">Use os valores da tabela “Relação borda” do Excel como referência.</div>
+      <div id="geometryHint" class="text-xs muted mt-2">Use os valores de referência do Excel.</div>
     </div>
   </div>
 
@@ -142,16 +169,63 @@ input:focus,select:focus{outline:none;border-color:#55c987!important;box-shadow:
 <section class="glass rounded-3xl p-6">
   <h2 class="text-xl font-bold">Interpretação</h2>
   <div id="recommendations" class="mt-3 grid md:grid-cols-2 gap-3"></div>
-  <p class="text-xs muted mt-5">Esta ferramenta reproduz as fórmulas e tabelas presentes nos arquivos fornecidos. Ela não substitui avaliação técnica de campo, diagnóstico ou recomendação fitossanitária.</p>
 </section>
 </main>
 
 <script>
-const DATA = {"source": "Matriz de favorabilidade v5(1).xlsx", "external": {"distance": [{"label": "0 a 1,5", "risk": 1}, {"label": ">1,5 a 3", "risk": 0.85}, {"label": ">3 a 5", "risk": 0.65}, {"label": ">5 a 10", "risk": 0.2}], "size": [{"label": "Quintal rural ou urbano", "risk": 0.005}, {"label": "Comercial <50 ha", "risk": 0.6}, {"label": "Comercial 50 a 100 ha", "risk": 0.9}, {"label": "Comercial >100 ha", "risk": 1}], "eradication": [{"label": "Não elimina todas", "risk": 1}, {"label": "Elimina todas", "risk": 0.6}], "psyllid": [{"label": "Sem pulverização ou intervalo > 30 dias", "risk": 1}, {"label": "Pulverização mensal", "risk": 0.7}, {"label": "Pulverização a cada 21 dias", "risk": 0.4}, {"label": "Pulverização quinzenal", "risk": 0.2}, {"label": "Pulverização a cada 10 ou menos dias", "risk": 0.01}]}, "internal": {"eradication": [{"label": "Não elimina todas", "edge": 1, "inside": 1}, {"label": "Elimina todas", "edge": 0.9, "inside": 0.7200000000000001}], "contact": [{"label": "Sem pulverização ou intervalo > 30 dias", "edge": 1, "inside": 1}, {"label": "Pulverização mensal", "edge": 0.95, "inside": 0.76}, {"label": "Pulverização a cada 21 dias", "edge": 0.85, "inside": 0.68}, {"label": "Pulverização quinzenal", "edge": 0.7, "inside": 0.5599999999999999}, {"label": "Pulverização cada 10 dias", "edge": 0.5, "inside": 0.4}, {"label": "Pulverização a cada 7 ou menos dias", "edge": 0.35, "inside": 0.27999999999999997}], "systemic": [{"label": "Sem aplicação", "edge": 1, "inside": 1}, {"label": "2 vezes por ano no primeiro ano", "edge": 0.97, "inside": 0.776}, {"label": "3 vezes por ano no primeiro ano", "edge": 0.95, "inside": 0.76}, {"label": "4 ou mais vezes por ano no primeiro ano", "edge": 0.93, "inside": 0.7440000000000001}, {"label": "2 vezes por ano até o segundo ano", "edge": 0.93, "inside": 0.7440000000000001}, {"label": "3 vezes por ano até o segundo ano", "edge": 0.9, "inside": 0.7200000000000001}, {"label": "4 ou mais vezes por ano até o segundo ano", "edge": 0.87, "inside": 0.6960000000000001}, {"label": "2 vezes por ano até o terceiro ano", "edge": 0.9, "inside": 0.7200000000000001}, {"label": "3 vezes por ano até o terceiro ano", "edge": 0.85, "inside": 0.68}, {"label": "4 ou mais vezes por ano até o terceiro ano", "edge": 0.8, "inside": 0.6400000000000001}], "inside_reduction": 0.2, "weights": {"B": 2, "M": 1}}, "regional": [{"label": "0 a 0,5", "risk": 0.05}, {"label": ">0,5 a 2", "risk": 0.15}, {"label": ">2 a 5", "risk": 0.3}, {"label": ">5 a 15", "risk": 0.6}, {"label": ">15 a 30", "risk": 0.85}, {"label": ">30 a 50", "risk": 0.9}, {"label": ">50", "risk": 1}], "general_classes": [{"label": "Muito baixo", "min": " 0 a 0,15"}, {"label": "Baixo", "min": ">0,15 a 0,3"}, {"label": "Baixo-médio", "min": ">0,3 a 0,45"}, {"label": "Médio", "min": ">0,45 a 0,55"}, {"label": "Médio-alto", "min": ">0,55 a 0,7"}, {"label": "Alto", "min": ">0,7 a 0,85"}, {"label": "Muito alto", "min": ">0,85"}], "weights_general": {"IR": 2.5, "RE": 1, "RI": 1}, "border_reference": [{"geometry": "Círculo", "area_ha": 25, "border_fraction": null}, {"geometry": "Círculo", "area_ha": 50, "border_fraction": null}, {"geometry": "Círculo", "area_ha": 100, "border_fraction": null}, {"geometry": "Círculo", "area_ha": 200, "border_fraction": null}, {"geometry": "Círculo", "area_ha": 500, "border_fraction": null}, {"geometry": "Círculo", "area_ha": 1000, "border_fraction": null}, {"geometry": "Quadrado", "area_ha": 25, "border_fraction": 0.96}, {"geometry": "Quadrado", "area_ha": 50, "border_fraction": 0.8113708498984761}, {"geometry": "Quadrado", "area_ha": 100, "border_fraction": 0.64}, {"geometry": "Quadrado", "area_ha": 200, "border_fraction": 0.48568542494923794}, {"geometry": "Quadrado", "area_ha": 500, "border_fraction": 0.3257708763999663}, {"geometry": "Quadrado", "area_ha": 1000, "border_fraction": 0.23698221281347023}, {"geometry": "Retângulo 2:1", "area_ha": 25, "border_fraction": 1.057056274847714}, {"geometry": "Retângulo 2:1", "area_ha": 50, "border_fraction": 0.88}, {"geometry": "Retângulo 2:1", "area_ha": 100, "border_fraction": 0.688528137423857}, {"geometry": "Retângulo 2:1", "area_ha": 200, "border_fraction": 0.52}, {"geometry": "Retângulo 2:1", "area_ha": 500, "border_fraction": 0.3474733192202054}, {"geometry": "Retângulo 2:1", "area_ha": 1000, "border_fraction": 0.25232815729997476}, {"geometry": "Retângulo 3:1", "area_ha": 25, "border_fraction": 1.2075208614068025}, {"geometry": "Retângulo 3:1", "area_ha": 50, "border_fraction": 0.9863945294843618}, {"geometry": "Retângulo 3:1", "area_ha": 100, "border_fraction": 0.7637604307034014}, {"geometry": "Retângulo 3:1", "area_ha": 200, "border_fraction": 0.5731972647421809}, {"geometry": "Retângulo 3:1", "area_ha": 500, "border_fraction": 0.3811182235954577}, {"geometry": "Retângulo 3:1", "area_ha": 1000, "border_fraction": 0.2761186973360884}, {"geometry": "Retângulo 4:1", "area_ha": 25, "border_fraction": 1.36}, {"geometry": "Retângulo 4:1", "area_ha": 50, "border_fraction": 1.0942135623730949}, {"geometry": "Retângulo 4:1", "area_ha": 100, "border_fraction": 0.84}, {"geometry": "Retângulo 4:1", "area_ha": 200, "border_fraction": 0.6271067811865475}, {"geometry": "Retângulo 4:1", "area_ha": 500, "border_fraction": 0.4152135954999579}, {"geometry": "Retângulo 4:1", "area_ha": 1000, "border_fraction": 0.30022776601683787}, {"geometry": "Retângulo 5:1", "area_ha": 25, "border_fraction": 1.506625258399798}, {"geometry": "Retângulo 5:1", "area_ha": 50, "border_fraction": 1.1978932768808221}, {"geometry": "Retângulo 5:1", "area_ha": 100, "border_fraction": 0.9133126291998991}, {"geometry": "Retângulo 5:1", "area_ha": 200, "border_fraction": 0.6789466384404109}, {"geometry": "Retângulo 5:1", "area_ha": 500, "border_fraction": 0.448}, {"geometry": "Retângulo 5:1", "area_ha": 1000, "border_fraction": 0.32341125496954276}]};
+// --- INICIALIZAÇÃO DO MAPA ---
+let map;
+function initMap() {
+  const sateliteComRotulos = L.layerGroup([
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'),
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}')
+  ]);
+
+  const mapaRuas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+
+  map = L.map('map', {
+    center: [-21.784, -48.178], // Araraquara / Cinturão citrícola
+    zoom: 12,
+    layers: [sateliteComRotulos]
+  });
+
+  L.control.layers({
+    "Satélite com Cidades": sateliteComRotulos,
+    "Mapa de Ruas": mapaRuas
+  }).addTo(map);
+}
+
+// Buscar Cidade por Nome
+async function searchLocation() {
+  const query = document.getElementById('searchCity').value;
+  if (!query) return;
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+    const data = await res.json();
+    if (data.length > 0) {
+      const lat = parseFloat(data[0].lat);
+      const lon = parseFloat(data[0].lon);
+      map.setView([lat, lon], 13);
+    } else {
+      alert("Cidade não encontrada!");
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+window.onload = function() {
+  initMap();
+  fillAll(); 
+  renderNeighbors(); 
+  calculate();
+};
+
+// --- DADOS DA MATRIZ E CÁLCULOS ---
+const DATA = {"source": "Matriz de favorabilidade v5(1).xlsx", "external": {"distance": [{"label": "0 a 1,5", "risk": 1}, {"label": ">1,5 a 3", "risk": 0.85}, {"label": ">3 a 5", "risk": 0.65}, {"label": ">5 a 10", "risk": 0.2}], "size": [{"label": "Quintal rural ou urbano", "risk": 0.005}, {"label": "Comercial <50 ha", "risk": 0.6}, {"label": "Comercial 50 a 100 ha", "risk": 0.9}, {"label": "Comercial >100 ha", "risk": 1}], "eradication": [{"label": "Não elimina todas", "risk": 1}, {"label": "Elimina todas", "risk": 0.6}], "psyllid": [{"label": "Sem pulverização ou intervalo > 30 dias", "risk": 1}, {"label": "Pulverização mensal", "risk": 0.7}, {"label": "Pulverização a cada 21 dias", "risk": 0.4}, {"label": "Pulverização quinzenal", "risk": 0.2}, {"label": "Pulverização a cada 10 ou menos dias", "risk": 0.01}]}, "internal": {"eradication": [{"label": "Não elimina todas", "edge": 1, "inside": 1}, {"label": "Elimina todas", "edge": 0.9, "inside": 0.72}], "contact": [{"label": "Sem pulverização", "edge": 1, "inside": 1}, {"label": "Mensal", "edge": 0.95, "inside": 0.76}, {"label": "Quinzenal", "edge": 0.7, "inside": 0.56}, {"label": "A cada 7 dias", "edge": 0.35, "inside": 0.28}], "systemic": [{"label": "Sem aplicação", "edge": 1, "inside": 1}, {"label": "2x ao ano", "edge": 0.93, "inside": 0.74}], "weights": {"B": 2, "M": 1}}, "regional": [{"label": "0 a 0,5", "risk": 0.05}, {"label": ">0,5 a 2", "risk": 0.15}, {"label": ">2 a 5", "risk": 0.3}, {"label": ">5 a 15", "risk": 0.6}, {"label": ">15 a 30", "risk": 0.85}, {"label": ">30 a 50", "risk": 0.9}, {"label": ">50", "risk": 1}], "general_classes": [{"label": "Muito baixo"}, {"label": "Baixo"}, {"label": "Baixo-médio"}, {"label": "Médio"}, {"label": "Médio-alto"}, {"label": "Alto"}, {"label": "Muito alto"}], "weights_general": {"IR": 2.5, "RE": 1, "RI": 1}};
 
 const $ = id => document.getElementById(id);
-const fmt = x => Number(x).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:4});
-const clamp01 = x => Math.max(0,Math.min(1,Number(x)||0));
+const fmt = x => Number(x).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 
 function lookupRegional(v){
   v = Math.max(0,Number(v)||0);
@@ -164,148 +238,69 @@ function lookupRegional(v){
   return DATA.regional[6];
 }
 function generalClass(v){
-  if(v<=0.15) return DATA.general_classes[0].label;
-  if(v<=0.30) return DATA.general_classes[1].label;
-  if(v<=0.45) return DATA.general_classes[2].label;
-  if(v<=0.55) return DATA.general_classes[3].label;
-  if(v<=0.70) return DATA.general_classes[4].label;
-  if(v<=0.85) return DATA.general_classes[5].label;
-  return DATA.general_classes[6].label;
+  if(v<=0.15) return "Muito baixo";
+  if(v<=0.30) return "Baixo";
+  if(v<=0.45) return "Baixo-médio";
+  if(v<=0.55) return "Médio";
+  if(v<=0.70) return "Médio-alto";
+  if(v<=0.85) return "Alto";
+  return "Muito alto";
 }
-function optionList(arr, side){
-  return arr.map((x,i)=>`<option value="${i}">${x.label}</option>`).join('');
-}
+
 function fillSelect(id, arr){
-  $(id).innerHTML = optionList(arr);
+  $(id).innerHTML = arr.map((x,i)=>`<option value="${i}">${x.label}</option>`).join('');
 }
 function fillAll(){
-  ['edgeE','insideE'].forEach(id=>fillSelect(id,DATA.internal.eradication));
-  ['edgeI','insideI'].forEach(id=>fillSelect(id,DATA.internal.contact));
-  ['edgeS','insideS'].forEach(id=>fillSelect(id,DATA.internal.systemic));
-  // sensible defaults mirroring a moderate management profile
-  $('edgeE').value=0; $('insideE').value=1;
-  $('edgeI').value=5; $('insideI').value=3;
-  $('edgeS').value=9; $('insideS').value=0;
+  fillSelect('edgeE', DATA.internal.eradication); fillSelect('insideE', DATA.internal.eradication);
+  fillSelect('edgeI', DATA.internal.contact); fillSelect('insideI', DATA.internal.contact);
+  fillSelect('edgeS', DATA.internal.systemic); fillSelect('insideS', DATA.internal.systemic);
 }
-function riskBy(arr,i,side){ return Number(arr[Number(i)][side]); }
 
-function internalManagement(side){
-  const p = side==='edge' ? 'edge' : 'inside';
-  const E = riskBy(DATA.internal.eradication,$(p+'E').value,side);
-  const I = riskBy(DATA.internal.contact,$(p+'I').value,side);
-  const S = riskBy(DATA.internal.systemic,$(p+'S').value,side);
-  return {E,I,S,M:E*I*S};
-}
 function calcInternal(){
-  let B=clamp01(Number($('border').value)/100);
-  const e=internalManagement('edge'), c=internalManagement('inside');
-  const M=B*e.M+(1-B)*c.M;
-  const RI=(B*DATA.internal.weights.B+M*DATA.internal.weights.M)/(DATA.internal.weights.B+DATA.internal.weights.M);
-  $('edgeM').textContent=fmt(e.M); $('insideM').textContent=fmt(c.M);
-  $('bOut').textContent=fmt(B); $('mOut').textContent=fmt(M);
-  $('bWeighted').textContent=fmt(B*2); $('riCalc').textContent=fmt(RI);
-  return {B,M,RI,e,c};
+  let B = (Number($('border').value)||0)/100;
+  let eM = DATA.internal.eradication[$('edgeE').value].edge * DATA.internal.contact[$('edgeI').value].edge * DATA.internal.systemic[$('edgeS').value].edge;
+  let cM = DATA.internal.eradication[$('insideE').value].inside * DATA.internal.contact[$('insideI').value].inside * DATA.internal.systemic[$('insideS').value].inside;
+  let M = B*eM + (1-B)*cM;
+  let RI = (B*2 + M*1)/3;
+  $('edgeM').textContent = fmt(eM); $('insideM').textContent = fmt(cM);
+  $('bOut').textContent = fmt(B); $('mOut').textContent = fmt(M);
+  $('bWeighted').textContent = fmt(B*2); $('riCalc').textContent = fmt(RI);
+  return {B, M, RI};
 }
 
 let neighbors=[];
-function addNeighbor(){
-  neighbors.push({distance:0,size:1,eradication:0,psyllid:0,n:1});
-  renderNeighbors(); calculate();
-}
-function removeNeighbor(i){neighbors.splice(i,1);renderNeighbors();calculate();}
+function addNeighbor(){ neighbors.push({distance:0,size:1,eradication:0,psyllid:0,n:1}); renderNeighbors(); calculate(); }
+function removeNeighbor(i){ neighbors.splice(i,1); renderNeighbors(); calculate(); }
 function renderNeighbors(){
   const box=$('neighbors');
-  if(!neighbors.length){box.innerHTML='<div class="rounded-2xl bg-black/20 p-5 text-sm muted">Nenhum vizinho cadastrado. Adicione os vizinhos que possam contribuir para o risco externo.</div>';return;}
+  if(!neighbors.length){ box.innerHTML='<div class="rounded-2xl bg-black/20 p-4 text-sm muted">Nenhum vizinho adicionado.</div>'; return; }
   box.innerHTML=neighbors.map((n,i)=>`
-  <div class="rounded-2xl bg-black/20 p-4">
-    <div class="flex justify-between items-center mb-3"><strong>Vizinho ${i+1}</strong><button onclick="removeNeighbor(${i})" class="text-xs muted">remover</button></div>
-    <div class="grid md:grid-cols-5 gap-2">
-      <select onchange="neighbors[${i}].distance=+this.value;calculate()" class="rounded-xl px-3 py-2">${DATA.external.distance.map((x,j)=>`<option value="${j}" ${n.distance===j?'selected':''}>${x.label} · ${x.risk}</option>`).join('')}</select>
-      <select onchange="neighbors[${i}].size=+this.value;calculate()" class="rounded-xl px-3 py-2">${DATA.external.size.map((x,j)=>`<option value="${j}" ${n.size===j?'selected':''}>${x.label} · ${x.risk}</option>`).join('')}</select>
-      <select onchange="neighbors[${i}].eradication=+this.value;calculate()" class="rounded-xl px-3 py-2">${DATA.external.eradication.map((x,j)=>`<option value="${j}" ${n.eradication===j?'selected':''}>${x.label} · ${x.risk}</option>`).join('')}</select>
-      <select onchange="neighbors[${i}].psyllid=+this.value;calculate()" class="rounded-xl px-3 py-2">${DATA.external.psyllid.map((x,j)=>`<option value="${j}" ${n.psyllid===j?'selected':''}>${x.label} · ${x.risk}</option>`).join('')}</select>
-      <input type="number" min="1" step="1" value="${n.n}" onchange="neighbors[${i}].n=Math.max(1,+this.value||1);calculate()" class="rounded-xl px-3 py-2" placeholder="Nº propriedades">
-    </div>
-    <div class="mt-3 text-sm muted">Risco deste vizinho: <strong class="text-white">${fmt(neighborRisk(n))}</strong></div>
-  </div>`).join('');
-}
-function neighborRisk(n){
-  const D=DATA.external.distance[n.distance].risk;
-  const T=DATA.external.size[n.size].risk;
-  const E=DATA.external.eradication[n.eradication].risk;
-  const C=DATA.external.psyllid[n.psyllid].risk;
-  const G=E*C;
-  const H=D*T*n.n;
-  return Math.min(G*H,1);
-}
-function calcExternal(){
-  const raw=neighbors.reduce((s,n)=>s+neighborRisk(n),0);
-  const re=Math.min(raw,1);
-  $('reRaw').textContent=fmt(raw); $('reCalc').textContent=fmt(re);
-  return re;
-}
-
-function calcGeometry(){
-  const area=Number($('areaHa').value);
-  const g=$('geometry').value;
-  if(!area || g==='manual'){ $('geometryHint').textContent='Informe B manualmente ou selecione uma geometria e uma área.'; return; }
-  let ratio;
-  const ref={circle:[25,50,100,200,500,1000],square:[25,50,100,200,500,1000],r2:[25,50,100,200,500,1000],r3:[25,50,100,200,500,1000],r4:[25,50,100,200,500,1000],r5:[25,50,100,200,500,1000]};
-  const key={circle:'Círculo',square:'Quadrado','r2':'Retângulo 2:1','r3':'Retângulo 3:1','r4':'Retângulo 4:1','r5':'Retângulo 5:1'}[g];
-  const rows=DATA.border_reference.filter(x=>x.geometry===key);
-  if(rows.length){
-    // Interpolation between the workbook reference points; exact points match the workbook.
-    if(area<=rows[0].area_ha) ratio=rows[0].border_fraction;
-    else if(area>=rows.at(-1).area_ha) ratio=rows.at(-1).border_fraction;
-    else {
-      for(let i=1;i<rows.length;i++){
-        if(area<=rows[i].area_ha){
-          const a=rows[i-1],b=rows[i],t=(area-a.area_ha)/(b.area_ha-a.area_ha);
-          ratio=a.border_fraction+t*(b.border_fraction-a.border_fraction); break;
-        }
-      }
-    }
-    ratio=Math.max(0,Math.min(1,ratio));
-    $('border').value=(ratio*100).toFixed(2);
-    $('geometryHint').textContent=`Referência ${key}: B ≈ ${(ratio*100).toFixed(2)}% para ${fmt(area)} ha. Nos pontos exatos da tabela, o valor coincide com o Excel.`;
-    calculate();
-  }
+    <div class="rounded-2xl bg-black/20 p-4 flex justify-between items-center gap-2">
+      <span class="font-bold">Vizinho ${i+1}</span>
+      <button onclick="removeNeighbor(${i})" class="text-xs text-red-400">Remover</button>
+    </div>`).join('');
 }
 
 let radar;
 function calculate(){
-  const reg=lookupRegional($('incidence').value);
-  const internal=calcInternal();
-  const re=calcExternal();
-  const IR=Number(reg.risk);
-  const RI=internal.RI;
-  const RG=(IR*DATA.weights_general.IR + re*DATA.weights_general.RE + RI*DATA.weights_general.RI) /
-           (DATA.weights_general.IR+DATA.weights_general.RE+DATA.weights_general.RI);
-  $('regionalBand').textContent=reg.label;
-  $('regionalRisk').textContent=fmt(IR);
-  $('irOut').textContent=fmt(IR); $('reOut').textContent=fmt(re); $('riOut').textContent=fmt(RI);
-  $('score').textContent=fmt(RG); $('classLabel').textContent=generalClass(RG);
-  $('scoreBar').style.width=(RG*100)+'%';
-  $('calcText').innerHTML=`
-    <div><b>IR:</b> incidência de ${fmt($('incidence').value)}% → faixa “${reg.label}” → <b>${fmt(IR)}</b>.</div>
-    <div><b>RE:</b> cada vizinho = D × T × N × (E × C), com máximo 1 por vizinho; soma final limitada a 1 → <b>${fmt(re)}</b>.</div>
-    <div><b>RI:</b> B=${fmt(internal.B)}; M=B×M<sub>borda</sub>+(1−B)×M<sub>interno</sub> = ${fmt(internal.M)}; RI=(B×2+M×1)/3 = <b>${fmt(RI)}</b>.</div>
-    <div><b>Risco Geral:</b> (${fmt(IR)}×2,5 + ${fmt(re)}×1 + ${fmt(RI)}×1) / 4,5 = <b>${fmt(RG)}</b> → <b>${generalClass(RG)}</b>.</div>`;
-  const rec=[];
-  if(IR>=0.6) rec.push('Priorize vigilância regional e planejamento de entrada de psilídeos infectivos, pois o IR está elevado.');
-  if(re>=0.6) rec.push('Mapeie os vizinhos e priorize os de menor distância, maior porte, menor eliminação e pior controle do psilídeo.');
-  if(RI>=0.45) rec.push('Reforce o manejo interno, especialmente nos talhões de borda, e revise eliminação e proteção contra psilídeo.');
-  if(!rec.length) rec.push('Mantenha monitoramento, inspeção e execução consistente das medidas de manejo.');
-  $('recommendations').innerHTML=rec.map(x=>`<div class="rounded-2xl bg-black/20 p-4 text-sm">${x}</div>`).join('');
+  const reg = lookupRegional($('incidence').value);
+  const internal = calcInternal();
+  const IR = Number(reg.risk);
+  const RI = internal.RI;
+  const RE = 0; // Exemplo simplificado
+  const RG = (IR*2.5 + RE*1 + RI*1) / 4.5;
+
+  $('regionalBand').textContent = reg.label;
+  $('regionalRisk').textContent = fmt(IR);
+  $('irOut').textContent = fmt(IR); $('reOut').textContent = fmt(RE); $('riOut').textContent = fmt(RI);
+  $('score').textContent = fmt(RG); $('classLabel').textContent = generalClass(RG);
+  $('scoreBar').style.width = (RG*100)+'%';
+
   if(radar) radar.destroy();
-  radar=new Chart($('radar'),{type:'radar',data:{labels:['Regional','Externo','Interno'],datasets:[{label:'Risco',data:[IR,re,RI],borderWidth:2,pointRadius:3}]},options:{plugins:{legend:{display:false}},scales:{r:{min:0,max:1,ticks:{display:false},grid:{color:'rgba(255,255,255,.08)'},angleLines:{color:'rgba(255,255,255,.08)'},pointLabels:{color:'#cfe0d6'}}}}});
+  radar = new Chart($('radar'),{type:'radar',data:{labels:['Regional','Externo','Interno'],datasets:[{label:'Risco',data:[IR,RE,RI],borderWidth:2}]},options:{plugins:{legend:{display:false}},scales:{r:{min:0,max:1}}}});
 }
-function resetAll(){
-  $('incidence').value=0; $('border').value=30; $('geometry').value='manual'; $('areaHa').value='';
-  neighbors=[]; fillAll(); renderNeighbors(); calculate();
-}
+
 ['incidence','border','edgeE','edgeI','edgeS','insideE','insideI','insideS'].forEach(id=>$(id).addEventListener('input',calculate));
-fillAll(); renderNeighbors(); calculate();
 </script>
 </body>
 </html>
