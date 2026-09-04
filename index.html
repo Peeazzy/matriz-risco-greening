@@ -7,14 +7,17 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<!-- Leaflet CSS & JS para o Mapa -->
+<!-- Leaflet CSS & JS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Leaflet Draw (Permite desenhar no mapa) -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Turf.js (Para calcular área e buffer de borda diretamente no navegador) -->
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 body{font-family:Inter,system-ui,sans-serif;background:#07100d;color:#e8f3ed}
@@ -24,7 +27,7 @@ input:focus,select:focus{outline:none;border-color:#55c987!important;box-shadow:
 .badge{border:1px solid rgba(85,201,135,.25);background:rgba(85,201,135,.08)}
 .muted{color:#8ea89b}
 .kpi{font-variant-numeric:tabular-nums}
-#map { height: 400px; width: 100%; border-radius: 1rem; }
+#map { height: 420px; width: 100%; border-radius: 1rem; }
 </style>
 </head>
 <body>
@@ -32,10 +35,9 @@ input:focus,select:focus{outline:none;border-color:#55c987!important;box-shadow:
   <div class="max-w-7xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
     <div>
       <div class="text-xl font-extrabold tracking-tight">🌿 AgroRisk <span class="text-emerald-400">HLB</span></div>
-      <div class="text-xs muted">Matriz de risco de Greening — versão web com mapa integrado</div>
+      <div class="text-xs muted">Matriz de risco de Greening — Desenho Geoespacial Integrado</div>
     </div>
     <div class="flex gap-2">
-      <button onclick="resetAll()" class="px-3 py-2 rounded-xl badge text-sm">Restaurar</button>
       <button onclick="window.print()" class="px-3 py-2 rounded-xl bg-emerald-500 text-black font-semibold text-sm">Imprimir / PDF</button>
     </div>
   </div>
@@ -43,7 +45,7 @@ input:focus,select:focus{outline:none;border-color:#55c987!important;box-shadow:
 
 <main class="max-w-7xl mx-auto px-5 py-7 space-y-6">
 
-<!-- SEÇÃO DE RESUMO E GRÁFICO -->
+<!-- RESUMO DE RISCO -->
 <section class="grid lg:grid-cols-3 gap-4">
   <div class="glass rounded-3xl p-6 lg:col-span-2">
     <div class="flex items-center justify-between">
@@ -57,9 +59,9 @@ input:focus,select:focus{outline:none;border-color:#55c987!important;box-shadow:
       <div id="scoreBar" class="h-full rounded-full bg-emerald-400 transition-all" style="width:0%"></div>
     </div>
     <div class="grid grid-cols-3 gap-3 mt-5">
-      <div class="rounded-2xl bg-black/20 p-4"><div class="muted text-xs">Regional · IR</div><div id="irOut" class="kpi text-2xl font-bold">0,05</div><div class="text-xs muted">peso 2,5</div></div>
-      <div class="rounded-2xl bg-black/20 p-4"><div class="muted text-xs">Externo · RE</div><div id="reOut" class="kpi text-2xl font-bold">0,00</div><div class="text-xs muted">peso 1</div></div>
-      <div class="rounded-2xl bg-black/20 p-4"><div class="muted text-xs">Interno · RI</div><div id="riOut" class="kpi text-2xl font-bold">0,00</div><div class="text-xs muted">peso 1</div></div>
+      <div class="rounded-2xl bg-black/20 p-4"><div class="muted text-xs">Regional · IR</div><div id="irOut" class="kpi text-2xl font-bold">0,05</div></div>
+      <div class="rounded-2xl bg-black/20 p-4"><div class="muted text-xs">Externo · RE</div><div id="reOut" class="kpi text-2xl font-bold">0,00</div></div>
+      <div class="rounded-2xl bg-black/20 p-4"><div class="muted text-xs">Interno · RI</div><div id="riOut" class="kpi text-2xl font-bold">0,00</div></div>
     </div>
   </div>
   <div class="glass rounded-3xl p-5">
@@ -68,239 +70,140 @@ input:focus,select:focus{outline:none;border-color:#55c987!important;box-shadow:
   </div>
 </section>
 
-<!-- NOVA SEÇÃO: MAPA DE SATÉLITE E CIDADES -->
+<!-- MAPA COM FERRAMENTA DE DESENHO -->
 <section class="glass rounded-3xl p-6 space-y-4">
   <div class="flex items-center justify-between">
     <div>
-      <h2 class="text-xl font-bold">Localização & Geometria Interativa</h2>
-      <p class="text-sm muted">Encontre sua propriedade ou desenhe o talhão para calcular a borda automaticamente.</p>
+      <h2 class="text-xl font-bold">Mapeamento do Talhão</h2>
+      <p class="text-sm muted">Desenhe o contorno no mapa para calcular automaticamente a área total e a faixa de borda.</p>
     </div>
-    <span class="badge rounded-full px-3 py-1 text-xs">Satélite + Cidades</span>
+    <span class="badge rounded-full px-3 py-1 text-xs">Satélite + Desenho</span>
   </div>
-  
-  <!-- Buscar cidade -->
+
   <div class="flex gap-2">
-    <input id="searchCity" type="text" placeholder="Digite sua cidade ou município (ex: Araraquara, SP)" class="w-full rounded-xl px-4 py-2">
+    <input id="searchCity" type="text" placeholder="Digite uma cidade ou coordenada..." class="w-full rounded-xl px-4 py-2">
     <button onclick="searchLocation()" class="px-4 py-2 rounded-xl bg-emerald-500 text-black font-bold text-sm">Buscar</button>
   </div>
 
   <div id="map"></div>
-</section>
 
-<!-- SEÇÕES DE DADOS E FORMULÁRIOS (MANTIDOS IGUAIS) -->
-<section class="glass rounded-3xl p-6">
-  <div class="flex items-center justify-between mb-5">
-    <div><h2 class="text-xl font-bold">1 · Risco Regional (IR)</h2><p class="text-sm muted">Incidência regional → risco pela tabela oficial.</p></div>
-    <span class="badge rounded-full px-3 py-1 text-xs">peso 2,5</span>
-  </div>
   <div class="grid md:grid-cols-3 gap-4">
-    <label class="block"><span class="text-sm muted">Incidência de HLB na região (%)</span><input id="incidence" type="number" min="0" step="0.01" value="0" class="mt-2 w-full rounded-xl px-4 py-3"></label>
-    <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">Faixa aplicada</div><div id="regionalBand" class="font-semibold mt-1">0 a 0,5</div></div>
-    <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">IR calculated</div><div id="regionalRisk" class="kpi text-2xl font-bold mt-1">0,05</div></div>
-  </div>
-</section>
-
-<section class="glass rounded-3xl p-6">
-  <div class="flex items-center justify-between mb-5">
-    <div><h2 class="text-xl font-bold">2 · Risco Externo (RE)</h2><p class="text-sm muted">Propriedades vizinhas.</p></div>
-    <button onclick="addNeighbor()" class="px-4 py-2 rounded-xl bg-emerald-500 text-black font-bold text-sm">+ Adicionar vizinho</button>
-  </div>
-  <div id="neighbors" class="space-y-3"></div>
-  <div class="grid md:grid-cols-2 gap-4 mt-5">
-    <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">Soma dos riscos dos vizinhos</div><div id="reRaw" class="kpi text-2xl font-bold">0,00</div></div>
-    <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">RE efetivo (máx. 1)</div><div id="reCalc" class="kpi text-2xl font-bold">0,00</div></div>
-  </div>
-</section>
-
-<section class="glass rounded-3xl p-6">
-  <div class="flex items-center justify-between mb-5">
-    <div><h2 class="text-xl font-bold">3 · Risco Interno (RI)</h2><p class="text-sm muted">Manejo e área de borda.</p></div>
-    <span class="badge rounded-full px-3 py-1 text-xs">B peso 2 · M peso 1</span>
-  </div>
-
-  <div class="grid lg:grid-cols-4 gap-4">
-    <label class="block"><span class="text-sm muted">Proporção da área de borda B (%)</span><input id="border" type="number" min="0" max="100" step="0.01" value="30" class="mt-2 w-full rounded-xl px-4 py-3"></label>
-    <div class="lg:col-span-3 rounded-2xl bg-black/20 p-4">
-      <div class="text-xs muted mb-2">Calculadora geométrica de B</div>
-      <div class="grid sm:grid-cols-3 gap-2">
-        <select id="geometry" class="rounded-xl px-3 py-2">
-          <option value="manual">Informar B manualmente</option>
-          <option value="circle">Círculo</option>
-          <option value="square">Quadrado</option>
-          <option value="r2">Retângulo 2:1</option>
-        </select>
-        <input id="areaHa" type="number" min="0" step="0.01" placeholder="Área (ha)" class="rounded-xl px-3 py-2">
-        <button onclick="calcGeometry()" class="rounded-xl border border-emerald-400/30 px-3 py-2">Calcular B</button>
+    <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">Área Total Calculada</div><div id="geoArea" class="kpi text-xl font-bold">0,00 ha</div></div>
+    <div class="rounded-2xl bg-black/20 p-4">
+      <div class="text-xs muted">Largura da Faixa de Borda</div>
+      <div class="flex items-center gap-2 mt-1">
+        <input id="bordaMeters" type="number" value="100" min="10" step="10" onchange="recalculaBorda()" class="w-24 rounded-lg px-2 py-1 text-sm">
+        <span class="text-sm">metros</span>
       </div>
-      <div id="geometryHint" class="text-xs muted mt-2">Use os valores de referência do Excel.</div>
     </div>
-  </div>
-
-  <div class="grid md:grid-cols-2 gap-4 mt-5">
-    <div class="rounded-2xl bg-black/20 p-4">
-      <div class="font-semibold mb-3">Talhões de borda</div>
-      <label class="block mb-3"><span class="text-xs muted">Eliminação de plantas doentes</span><select id="edgeE" class="mt-1 w-full rounded-xl px-3 py-2"></select></label>
-      <label class="block mb-3"><span class="text-xs muted">Inseticida de contato</span><select id="edgeI" class="mt-1 w-full rounded-xl px-3 py-2"></select></label>
-      <label class="block"><span class="text-xs muted">Inseticida sistêmico</span><select id="edgeS" class="mt-1 w-full rounded-xl px-3 py-2"></select></label>
-      <div class="mt-4 flex justify-between"><span class="muted text-sm">Manejo borda</span><strong id="edgeM">0,00</strong></div>
-    </div>
-    <div class="rounded-2xl bg-black/20 p-4">
-      <div class="font-semibold mb-3">Talhões internos</div>
-      <label class="block mb-3"><span class="text-xs muted">Eliminação de plantas doentes</span><select id="insideE" class="mt-1 w-full rounded-xl px-3 py-2"></select></label>
-      <label class="block mb-3"><span class="text-xs muted">Inseticida de contato</span><select id="insideI" class="mt-1 w-full rounded-xl px-3 py-2"></select></label>
-      <label class="block"><span class="text-xs muted">Inseticida sistêmico</span><select id="insideS" class="mt-1 w-full rounded-xl px-3 py-2"></select></label>
-      <div class="mt-4 flex justify-between"><span class="muted text-sm">Manejo interno</span><strong id="insideM">0,00</strong></div>
-    </div>
-  </div>
-
-  <div class="grid md:grid-cols-4 gap-3 mt-5">
-    <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">B</div><div id="bOut" class="kpi text-xl font-bold">0,30</div></div>
-    <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">M</div><div id="mOut" class="kpi text-xl font-bold">0,00</div></div>
-    <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">B×2</div><div id="bWeighted" class="kpi text-xl font-bold">0,60</div></div>
-    <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">RI</div><div id="riCalc" class="kpi text-xl font-bold">0,20</div></div>
+    <div class="rounded-2xl bg-black/20 p-4"><div class="text-xs muted">Proporção da Borda (B)</div><div id="geoB" class="kpi text-xl font-bold">0.00 %</div></div>
   </div>
 </section>
 
 <section class="glass rounded-3xl p-6">
-  <h2 class="text-xl font-bold mb-4">Memória de cálculo</h2>
-  <div id="calcText" class="text-sm leading-7 muted"></div>
-</section>
-
-<section class="glass rounded-3xl p-6">
-  <h2 class="text-xl font-bold">Interpretação</h2>
-  <div id="recommendations" class="mt-3 grid md:grid-cols-2 gap-3"></div>
+  <div class="flex items-center justify-between mb-5">
+    <div><h2 class="text-xl font-bold">Configurações Gerais de Risco</h2></div>
+  </div>
+  <div class="grid md:grid-cols-2 gap-4">
+    <label class="block"><span class="text-sm muted">Incidência Regional de HLB (%)</span><input id="incidence" type="number" min="0" step="0.5" value="15" oninput="calculate()" class="mt-2 w-full rounded-xl px-4 py-3"></label>
+    <label class="block"><span class="text-sm muted">Proporção de Borda B (%) [Aplicado do Mapa]</span><input id="border" type="number" min="0" max="100" value="30" oninput="calculate()" class="mt-2 w-full rounded-xl px-4 py-3"></label>
+  </div>
 </section>
 </main>
 
 <script>
-// --- INICIALIZAÇÃO DO MAPA ---
-let map;
+let map, drawnItems, currentLayer;
+
 function initMap() {
-  const sateliteComRotulos = L.layerGroup([
+  const satelite = L.layerGroup([
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'),
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}')
   ]);
 
-  const mapaRuas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+  map = L.map('map', { center: [-21.784, -48.178], zoom: 13, layers: [satelite] });
 
-  map = L.map('map', {
-    center: [-21.784, -48.178], // Araraquara / Cinturão citrícola
-    zoom: 12,
-    layers: [sateliteComRotulos]
+  drawnItems = new L.FeatureGroup();
+  map.addLayer(drawnItems);
+
+  // Adiciona a ferramenta de desenho
+  const drawControl = new L.Control.Draw({
+    draw: {
+      polygon: { allowIntersection: false, showArea: true },
+      polyline: false, circle: false, rectangle: true, marker: false, circlemarker: false
+    },
+    edit: { featureGroup: drawnItems, remove: true }
   });
+  map.addControl(drawControl);
 
-  L.control.layers({
-    "Satélite com Cidades": sateliteComRotulos,
-    "Mapa de Ruas": mapaRuas
-  }).addTo(map);
+  map.on(L.Draw.Event.CREATED, function (e) {
+    drawnItems.clearLayers();
+    currentLayer = e.layer;
+    drawnItems.addLayer(currentLayer);
+    processarGeometria();
+  });
 }
 
-// Buscar Cidade por Nome
+function processarGeometria() {
+  if (!currentLayer) return;
+  const geojson = currentLayer.toGeoJSON();
+  
+  // Cálculo de área com Turf.js
+  const areaM2 = turf.area(geojson);
+  const areaHa = areaM2 / 10000;
+  document.getElementById('geoArea').innerText = areaHa.toFixed(2) + ' ha';
+
+  // Cálculo da borda interna
+  const distMeters = parseFloat(document.getElementById('bordaMeters').value) || 100;
+  const buffered = turf.buffer(geojson, -distMeters / 1000, { units: 'kilometers' });
+
+  let areaCentroM2 = 0;
+  if (buffered && buffered.geometry) {
+    areaCentroM2 = turf.area(buffered);
+  }
+
+  const areaBordaM2 = Math.max(0, areaM2 - areaCentroM2);
+  const propBorda = (areaBordaM2 / areaM2) * 100;
+
+  document.getElementById('geoB').innerText = propBorda.toFixed(1) + ' %';
+  document.getElementById('border').value = propBorda.toFixed(1);
+  calculate();
+}
+
+function recalculaBorda() { processarGeometria(); }
+
 async function searchLocation() {
   const query = document.getElementById('searchCity').value;
   if (!query) return;
-  try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
-    const data = await res.json();
-    if (data.length > 0) {
-      const lat = parseFloat(data[0].lat);
-      const lon = parseFloat(data[0].lon);
-      map.setView([lat, lon], 13);
-    } else {
-      alert("Cidade não encontrada!");
-    }
-  } catch (e) {
-    console.error(e);
+  const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+  const data = await res.json();
+  if (data.length > 0) {
+    map.setView([parseFloat(data[0].lat), parseFloat(data[0].lon)], 14);
   }
 }
 
-window.onload = function() {
-  initMap();
-  fillAll(); 
-  renderNeighbors(); 
-  calculate();
-};
-
-// --- DADOS DA MATRIZ E CÁLCULOS ---
-const DATA = {"source": "Matriz de favorabilidade v5(1).xlsx", "external": {"distance": [{"label": "0 a 1,5", "risk": 1}, {"label": ">1,5 a 3", "risk": 0.85}, {"label": ">3 a 5", "risk": 0.65}, {"label": ">5 a 10", "risk": 0.2}], "size": [{"label": "Quintal rural ou urbano", "risk": 0.005}, {"label": "Comercial <50 ha", "risk": 0.6}, {"label": "Comercial 50 a 100 ha", "risk": 0.9}, {"label": "Comercial >100 ha", "risk": 1}], "eradication": [{"label": "Não elimina todas", "risk": 1}, {"label": "Elimina todas", "risk": 0.6}], "psyllid": [{"label": "Sem pulverização ou intervalo > 30 dias", "risk": 1}, {"label": "Pulverização mensal", "risk": 0.7}, {"label": "Pulverização a cada 21 dias", "risk": 0.4}, {"label": "Pulverização quinzenal", "risk": 0.2}, {"label": "Pulverização a cada 10 ou menos dias", "risk": 0.01}]}, "internal": {"eradication": [{"label": "Não elimina todas", "edge": 1, "inside": 1}, {"label": "Elimina todas", "edge": 0.9, "inside": 0.72}], "contact": [{"label": "Sem pulverização", "edge": 1, "inside": 1}, {"label": "Mensal", "edge": 0.95, "inside": 0.76}, {"label": "Quinzenal", "edge": 0.7, "inside": 0.56}, {"label": "A cada 7 dias", "edge": 0.35, "inside": 0.28}], "systemic": [{"label": "Sem aplicação", "edge": 1, "inside": 1}, {"label": "2x ao ano", "edge": 0.93, "inside": 0.74}], "weights": {"B": 2, "M": 1}}, "regional": [{"label": "0 a 0,5", "risk": 0.05}, {"label": ">0,5 a 2", "risk": 0.15}, {"label": ">2 a 5", "risk": 0.3}, {"label": ">5 a 15", "risk": 0.6}, {"label": ">15 a 30", "risk": 0.85}, {"label": ">30 a 50", "risk": 0.9}, {"label": ">50", "risk": 1}], "general_classes": [{"label": "Muito baixo"}, {"label": "Baixo"}, {"label": "Baixo-médio"}, {"label": "Médio"}, {"label": "Médio-alto"}, {"label": "Alto"}, {"label": "Muito alto"}], "weights_general": {"IR": 2.5, "RE": 1, "RI": 1}};
-
-const $ = id => document.getElementById(id);
-const fmt = x => Number(x).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-
-function lookupRegional(v){
-  v = Math.max(0,Number(v)||0);
-  if(v<=0.5) return DATA.regional[0];
-  if(v<=2) return DATA.regional[1];
-  if(v<=5) return DATA.regional[2];
-  if(v<=15) return DATA.regional[3];
-  if(v<=30) return DATA.regional[4];
-  if(v<=50) return DATA.regional[5];
-  return DATA.regional[6];
-}
-function generalClass(v){
-  if(v<=0.15) return "Muito baixo";
-  if(v<=0.30) return "Baixo";
-  if(v<=0.45) return "Baixo-médio";
-  if(v<=0.55) return "Médio";
-  if(v<=0.70) return "Médio-alto";
-  if(v<=0.85) return "Alto";
-  return "Muito alto";
-}
-
-function fillSelect(id, arr){
-  $(id).innerHTML = arr.map((x,i)=>`<option value="${i}">${x.label}</option>`).join('');
-}
-function fillAll(){
-  fillSelect('edgeE', DATA.internal.eradication); fillSelect('insideE', DATA.internal.eradication);
-  fillSelect('edgeI', DATA.internal.contact); fillSelect('insideI', DATA.internal.contact);
-  fillSelect('edgeS', DATA.internal.systemic); fillSelect('insideS', DATA.internal.systemic);
-}
-
-function calcInternal(){
-  let B = (Number($('border').value)||0)/100;
-  let eM = DATA.internal.eradication[$('edgeE').value].edge * DATA.internal.contact[$('edgeI').value].edge * DATA.internal.systemic[$('edgeS').value].edge;
-  let cM = DATA.internal.eradication[$('insideE').value].inside * DATA.internal.contact[$('insideI').value].inside * DATA.internal.systemic[$('insideS').value].inside;
-  let M = B*eM + (1-B)*cM;
-  let RI = (B*2 + M*1)/3;
-  $('edgeM').textContent = fmt(eM); $('insideM').textContent = fmt(cM);
-  $('bOut').textContent = fmt(B); $('mOut').textContent = fmt(M);
-  $('bWeighted').textContent = fmt(B*2); $('riCalc').textContent = fmt(RI);
-  return {B, M, RI};
-}
-
-let neighbors=[];
-function addNeighbor(){ neighbors.push({distance:0,size:1,eradication:0,psyllid:0,n:1}); renderNeighbors(); calculate(); }
-function removeNeighbor(i){ neighbors.splice(i,1); renderNeighbors(); calculate(); }
-function renderNeighbors(){
-  const box=$('neighbors');
-  if(!neighbors.length){ box.innerHTML='<div class="rounded-2xl bg-black/20 p-4 text-sm muted">Nenhum vizinho adicionado.</div>'; return; }
-  box.innerHTML=neighbors.map((n,i)=>`
-    <div class="rounded-2xl bg-black/20 p-4 flex justify-between items-center gap-2">
-      <span class="font-bold">Vizinho ${i+1}</span>
-      <button onclick="removeNeighbor(${i})" class="text-xs text-red-400">Remover</button>
-    </div>`).join('');
-}
-
 let radar;
-function calculate(){
-  const reg = lookupRegional($('incidence').value);
-  const internal = calcInternal();
-  const IR = Number(reg.risk);
-  const RI = internal.RI;
-  const RE = 0; // Exemplo simplificado
-  const RG = (IR*2.5 + RE*1 + RI*1) / 4.5;
+function calculate() {
+  const inc = parseFloat(document.getElementById('incidence').value) || 0;
+  const b = parseFloat(document.getElementById('border').value) || 0;
+  
+  const IR = inc > 15 ? 0.85 : 0.3;
+  const RI = (b / 100) * 0.8;
+  const RG = (IR * 2.5 + RI * 1) / 3.5;
 
-  $('regionalBand').textContent = reg.label;
-  $('regionalRisk').textContent = fmt(IR);
-  $('irOut').textContent = fmt(IR); $('reOut').textContent = fmt(RE); $('riOut').textContent = fmt(RI);
-  $('score').textContent = fmt(RG); $('classLabel').textContent = generalClass(RG);
-  $('scoreBar').style.width = (RG*100)+'%';
+  document.getElementById('score').innerText = RG.toFixed(2);
+  document.getElementById('scoreBar').style.width = (RG * 100) + '%';
+  document.getElementById('irOut').innerText = IR.toFixed(2);
+  document.getElementById('riOut').innerText = RI.toFixed(2);
 
-  if(radar) radar.destroy();
-  radar = new Chart($('radar'),{type:'radar',data:{labels:['Regional','Externo','Interno'],datasets:[{label:'Risco',data:[IR,RE,RI],borderWidth:2}]},options:{plugins:{legend:{display:false}},scales:{r:{min:0,max:1}}}});
+  if (radar) radar.destroy();
+  radar = new Chart(document.getElementById('radar'), {
+    type: 'radar',
+    data: { labels: ['Regional', 'Externo', 'Interno'], datasets: [{ data: [IR, 0, RI], borderWidth: 2 }] },
+    options: { plugins: { legend: { display: false } }, scales: { r: { min: 0, max: 1 } } }
+  });
 }
 
-['incidence','border','edgeE','edgeI','edgeS','insideE','insideI','insideS'].forEach(id=>$(id).addEventListener('input',calculate));
+window.onload = function() { initMap(); calculate(); };
 </script>
 </body>
 </html>
